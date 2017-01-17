@@ -115,6 +115,12 @@ MRUBY_BUILD_DIR='#{MRUBY_BUILD_DIR}' ./minirake all"
   sh "lipo -create #{libs.join ' '} -output #{t.name}"
 end
 
+file MRBC_EXEC => LIBMRUBY
+
+file "#{BUILD_DIR}/main_script.rb.c" => [Dir.glob("external/mobiruby-ios/src/*.rb"), MRBC_EXEC] do |t|
+  sh "#{MRBC_EXEC} -Bmrb_main_irep -o #{t.name} external/mobiruby-ios/src/*.rb"
+end
+
 rule(/\.o$/ => [proc {|n| n.sub(/\.o$/, '.c') }]) do |t|
   frameworks_dir = "#{ios_sdk target}/System/Library/Frameworks"
   frameworks = FRAMEWORKS.map{|v| "-framework #{v}" }

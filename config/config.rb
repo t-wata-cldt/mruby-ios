@@ -36,6 +36,7 @@ BASE_DIR = File.absolute_path "#{File.dirname(__FILE__)}/.."
 BUILD_DIR = "#{BASE_DIR}/build"
 MRUBY_BUILD_DIR = "#{BUILD_DIR}/mruby"
 MRUBY_CONFIG = File.absolute_path "#{BASE_DIR}/config/mruby_config.rb"
+MRBC_EXEC = "#{BUILD_DIR}/mruby/host/bin/mrbc"
 
 IOS_SDK = "#{PLATFORM_IOS}/Developer/SDKs/iPhoneOS#{SDK_IOS_VERSION}.sdk/"
 IOS_SIM_SDK = "#{PLATFORM_IOS_SIM}/Developer/SDKs/iPhoneSimulator#{SDK_IOS_VERSION}.sdk/"
