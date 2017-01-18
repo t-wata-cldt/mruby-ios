@@ -1,4 +1,6 @@
 APP_NAME = 'TestApp'
+PRODUCT_BUNDLE_IDENTIFIER = 'test'
+LANGUAGE = 'ja'
 
 # 依存ファイルバージョン
 MRUBY_VERSION = '1.2.0'
@@ -38,8 +40,8 @@ MRUBY_BUILD_DIR = "#{BUILD_DIR}/mruby"
 MRUBY_CONFIG = File.absolute_path "#{BASE_DIR}/config/mruby_config.rb"
 MRBC_EXEC = "#{BUILD_DIR}/mruby/host/bin/mrbc"
 
-IOS_SDK = "#{PLATFORM_IOS}/Developer/SDKs/iPhoneOS#{SDK_IOS_VERSION}.sdk/"
-IOS_SIM_SDK = "#{PLATFORM_IOS_SIM}/Developer/SDKs/iPhoneSimulator#{SDK_IOS_VERSION}.sdk/"
+IOS_SDK = "#{PLATFORM_IOS}/Developer/SDKs/iPhoneOS#{SDK_IOS_VERSION}.sdk"
+IOS_SIM_SDK = "#{PLATFORM_IOS_SIM}/Developer/SDKs/iPhoneSimulator#{SDK_IOS_VERSION}.sdk"
 
 APP_PATH = "#{BUILD_DIR}/ios/#{APP_NAME}.app"
 LIBMRUBY = "#{BUILD_DIR}/libmruby.a"
@@ -55,11 +57,11 @@ def ios_sdk target
 end
 
 def ios_cc target, arch
-  "#{`Xcrun -find -sdk #{ios_sdk target} cc`.strip} -arch #{arch} -std=gnu11"
+  "ccache #{`Xcrun -find -sdk #{ios_sdk target} cc`.strip} -arch #{arch} -std=gnu11"
 end
 
 def ios_cxx target, arch
-  "#{`xcrun -find -sdk #{ios_sdk target} c++`.strip} -arch #{arch} -std=gnu++11"
+  "ccache #{`xcrun -find -sdk #{ios_sdk target} c++`.strip} -arch #{arch} -std=gnu++11"
 end
 
 # ここらへんは以下のリンクを参考に

@@ -117,19 +117,120 @@ end
 
 file MRBC_EXEC => LIBMRUBY
 
-file "#{BUILD_DIR}/main_script.rb.c" => [Dir.glob("external/mobiruby-ios/src/*.rb"), MRBC_EXEC] do |t|
+file "#{BUILD_DIR}/main_script.rb.c" => [Dir.glob("external/mobiruby-ios/src/*.rb"), MRBC_EXEC].flatten do |t|
   sh "#{MRBC_EXEC} -Bmrb_main_irep -o #{t.name} external/mobiruby-ios/src/*.rb"
 end
 
-rule(/\.o$/ => [proc {|n| n.sub(/\.o$/, '.c') }]) do |t|
-  frameworks_dir = "#{ios_sdk target}/System/Library/Frameworks"
-  frameworks = FRAMEWORKS.map{|v| "-framework #{v}" }
-  sh "#{ios_cc target, arch} #{ios_cflags target, arch} #{t.source} -c -o #{t.name} \
--F#{frameworks_dir} #{frameworks}"
+BUILD_ARCHS.each do |target, archs|
+  archs.each do |arch|
+    directory "#{BUILD_DIR}/#{arch}"
+
+    frameworks_dir = "#{ios_sdk target}/System/Library/Frameworks"
+    frameworks = FRAMEWORKS.map{|v| "-framework #{v}" }.join ' '
+    include_dirs = ["#{BASE_DIR}/external/mobiruby-ios/include"].map{|v| "-I#{v}"}.join ' '
+
+    compile_c_src = Proc.new do |obj, src, build_exec = false|
+      FileUtils.mkdir_p File.dirname obj
+      src = src.join ' ' if src.kind_of? Array
+      if build_exec
+        obj = "#{obj} -lsqlite3" # sqlite3は動的ライブラリ
+      else
+        obj = "#{obj} -c"
+      end
+      sh "#{ios_cc target, arch} #{ios_cflags target, arch} -o #{obj} \
+-F#{frameworks_dir} #{frameworks} \
+#{include_dirs} \
+#{src}"
+    end
+
+    rule(/\.o$/ => "%{^#{BUILD_DIR}/#{arch},#{BASE_DIR}}X.c") do |t|
+      compile_c_src.call t.name, t.source
+    end
+    rule('.o' => "%{^#{BUILD_DIR}/#{arch},#{BUILD_DIR}}X.c") do |t|
+      compile_c_src.call t.name, t.source
+    end
+    rule(/\.o$/ => "%{^#{BUILD_DIR}/#{arch},#{BASE_DIR}}X.m") do |t|
+      compile_c_src.call t.name, t.source
+    end
+
+    main_obj = "#{BUILD_DIR}/#{arch}/external/mobiruby-ios/mobiruby-ios/main.o"
+    file "#{BUILD_DIR}/#{arch}/#{APP_NAME}" => [LIBMRUBY, "#{BUILD_DIR}/#{arch}/main_script.rb.o",
+                                                main_obj,
+                                                "#{BUILD_DIR}/libuv.a",
+                                                "#{BUILD_DIR}/libffi.a"] do |t|
+      compile_c_src.call t.name, t.prerequisites, true
+    end
+  end
+end
+
+execs = BUILD_ARCHS.values.flatten.map{|v| "#{BUILD_DIR}/#{v}/#{APP_NAME}" }
+file "#{APP_PATH}/#{APP_NAME}" => execs do |t|
+  FileUtils.mkdir_p File.dirname t.name
+  sh "lipo -create #{execs.join ' '} -output #{t.name}"
 end
 
 directory APP_PATH
-file APP_PATH => [LIBMRUBY] do
+file APP_PATH => ["#{APP_PATH}/#{APP_NAME}",
+                  'external/mobiruby-ios/icon.png',
+                  'external/mobiruby-ios/icon@2x.png'] do
+  FileUtils.cp 'external/mobiruby-ios/icon.png', "#{APP_PATH}/icon.png"
+  FileUtils.cp 'external/mobiruby-ios/icon@2x.png', "#{APP_PATH}/icon@2x.png"
+
+  File.write "#{APP_PATH}/Info.plist", <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>#{LANGUAGE}</string>
+	<key>CFBundleDisplayName</key>
+	<string>#{APP_NAME}</string>
+	<key>CFBundleExecutable</key>
+	<string>#{APP_NAME}</string>
+	<key>CFBundleIcons</key>
+	<dict>
+		<key>CFBundlePrimaryIcon</key>
+		<dict>
+			<key>CFBundleIconFiles</key>
+			<array>
+				<string>icon.png</string>
+				<string>icon@2x.png</string>
+			</array>
+		</dict>
+	</dict>
+	<key>CFBundleIdentifier</key>
+	<string>#{PRODUCT_BUNDLE_IDENTIFIER}</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>${PRODUCT_NAME}</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>1.0</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>armv7</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+</dict>
+</plist>
+EOF
 end
 
 desc 'アプリ生成'
