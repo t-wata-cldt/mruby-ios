@@ -24,6 +24,7 @@ mruby-enumerator mruby-enum-lazy mruby-toplevel-ext mruby-kernel-ext
 mruby-compiler)
 
 FRAMEWORKS = %w[QuartzCore AVFoundation SystemConfiguration UIKit Foundation CoreGraphics]
+STATIC_LIBS = %w[libuv libffi]
 
 PLATFORM_IOS = "#{`xcode-select -print-path`.strip}/Platforms/iPhoneOS.platform"
 PLATFORM_IOS_SIM = "#{`xcode-select -print-path`.strip}/Platforms/iPhoneSimulator.platform"
@@ -49,6 +50,8 @@ LIBMRUBY = "#{BUILD_DIR}/libmruby.a"
 # makeなどで同時実行するタスク数
 BUILD_TASKS = 4
 
+COCOA_BRIDGESUPPORT_C = "#{BUILD_DIR}/cocoa_bridgesupport.c"
+
 def ios_sdk target
   case target
   when :dev; sdk = IOS_SDK
@@ -56,18 +59,26 @@ def ios_sdk target
   end
 end
 
+def xcrun_find tool, sdk = nil
+  if sdk
+    `xcrun --sdk #{sdk} --find #{tool}`.strip
+  else
+    `xcrun --find #{tool}`.strip
+  end
+end
+
 def ios_cc target, arch
-  "ccache #{`Xcrun -find -sdk #{ios_sdk target} cc`.strip} -arch #{arch} -std=gnu11"
+  "ccache #{xcrun_find 'cc', ios_sdk(target)} -arch #{arch} -std=gnu11"
 end
 
 def ios_cxx target, arch
-  "ccache #{`xcrun -find -sdk #{ios_sdk target} c++`.strip} -arch #{arch} -std=gnu++11"
+  "ccache #{xcrun_find 'c++', ios_sdk(target)} -arch #{arch} -std=gnu++11"
 end
 
 # ここらへんは以下のリンクを参考に
 # http://www.srplab.com/en/files/others/compile/cross_compiling_python_for_ios.html
 BUILD_ARCHS = {
-  dev: [:armv7, :armv7s], # , :arm64
+  dev: [:armv7], # , :armv7s, :arm64
   sim: [:i386], # , :x86_64
 }
 
@@ -85,6 +96,7 @@ def ios_cflags target, arch
   ret << %Q[-isysroot #{ios_sdk target} #{MIN_IOS_VERSION_FLAG}]
   ret << %Q[-fmessage-length=0 -fpascal-strings -fexceptions -fasm-blocks -gdwarf-2]
   ret << %Q[-fobjc-abi-version=2]
+  ret << MIN_IOS_VERSION_FLAG
 
   ret.join(' ')
 end

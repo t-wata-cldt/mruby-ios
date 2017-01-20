@@ -73,10 +73,22 @@ BUILD_ARCHS.values.flatten.each do |arch|
 end
 
 # configureでクロスビルドしてユニバーサルライブラリ生成
-['libuv',  'libffi'].each do |lib|
+STATIC_LIBS.each do |lib|
   BUILD_ARCHS.each do |target, archs|
     archs.each do |arch|
       file "#{BUILD_DIR}/#{lib}/#{arch}/.libs/#{lib}.a" => "external/#{lib}" do |t|
+        # __clear_cacheがundefinedになるので
+        patching_file = "external/libffi/src/arm/ffi.c"
+        if lib == 'libffi' && File.read(patching_file) !~ /sys_icache_invalidate/
+          File.write patching_file, <<EOS
+#include <stddef.h>
+void sys_icache_invalidate(void *start, size_t len);
+#define __clear_cache(start, end) sys_icache_invalidate(start, (char *)end-(char *)start)
+
+#{File.read patching_file}
+EOS
+        end
+
         d = "#{BUILD_DIR}/#{lib}/#{arch}"
         FileUtils.mkdir_p d
         Dir.chdir d do
@@ -104,7 +116,6 @@ CXXCPP='#{ios_cxx target, arch} -E' CXXCPPFLAGS='#{ios_cflags target, arch}' \
   file LIBMRUBY => "#{BUILD_DIR}/#{lib}.a"
 end
 
-
 file LIBMRUBY => 'config/mruby_config.rb' do |t|
   Dir.chdir 'external/mruby' do
     sh "MRUBY_CONFIG='#{MRUBY_CONFIG}' \
@@ -121,6 +132,10 @@ file "#{BUILD_DIR}/main_script.rb.c" => [Dir.glob("external/mobiruby-ios/src/*.r
   sh "#{MRBC_EXEC} -Bmrb_main_irep -o #{t.name} external/mobiruby-ios/src/*.rb"
 end
 
+file "#{BUILD_DIR}/cocoa_bridgesupport.c" => "config/build-exports.rb" do |t|
+  load "#{BASE_DIR}/config/build-exports.rb"
+end
+
 BUILD_ARCHS.each do |target, archs|
   archs.each do |arch|
     directory "#{BUILD_DIR}/#{arch}"
@@ -133,11 +148,11 @@ BUILD_ARCHS.each do |target, archs|
       FileUtils.mkdir_p File.dirname obj
       src = src.join ' ' if src.kind_of? Array
       if build_exec
-        obj = "#{obj} -lsqlite3" # sqlite3は動的ライブラリ
+        extra_flags = "-lsqlite3" # sqlite3は動的ライブラリ
       else
-        obj = "#{obj} -c"
+        extra_flags = "-c" # オブジェクトファイルを作成
       end
-      sh "#{ios_cc target, arch} #{ios_cflags target, arch} -o #{obj} \
+      sh "#{ios_cc target, arch} #{ios_cflags target, arch} -o #{obj} #{extra_flags} \
 -F#{frameworks_dir} #{frameworks} \
 #{include_dirs} \
 #{src}"
@@ -154,10 +169,11 @@ BUILD_ARCHS.each do |target, archs|
     end
 
     main_obj = "#{BUILD_DIR}/#{arch}/external/mobiruby-ios/mobiruby-ios/main.o"
-    file "#{BUILD_DIR}/#{arch}/#{APP_NAME}" => [LIBMRUBY, "#{BUILD_DIR}/#{arch}/main_script.rb.o",
+    file "#{BUILD_DIR}/#{arch}/#{APP_NAME}" => [LIBMRUBY,
+                                                "#{BUILD_DIR}/#{arch}/main_script.rb.o",
+                                                "#{BUILD_DIR}/#{arch}/cocoa_bridgesupport.o",
                                                 main_obj,
-                                                "#{BUILD_DIR}/libuv.a",
-                                                "#{BUILD_DIR}/libffi.a"] do |t|
+                                                *STATIC_LIBS.map{|v| "#{BUILD_DIR}/#{v}.a" }] do |t|
       compile_c_src.call t.name, t.prerequisites, true
     end
   end
